@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="噴霧角度">
+<meta name="theme-color" content="#1f3a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>噴霧角度測定</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1c2733;--sub:#5d6b7a;--line:#d9e0e8;--main:#1f5fa8;--accent:#e8730c;--ok:#1b8a4b;--ng:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a222b;--ink:#e8eef5;--sub:#9aa8b8;--line:#2c3844;--main:#5aa2ee;--accent:#ff9a3d;--ok:#4cc27d;--ng:#ff7a6b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;font-size:16px;line-height:1.5;padding:0 16px env(safe-area-inset-bottom)}
+main{max-width:760px;margin:0 auto;padding-bottom:40px}
+h1{font-size:22px;margin:18px 0 4px}
+h2{font-size:17px;margin:0 0 10px}
+.badge{display:inline-block;font-size:13px;padding:2px 10px;border-radius:99px;background:var(--line);color:var(--sub)}
+.badge.ok{background:var(--ok);color:#fff}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:14px 0}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+button,.btn{font:inherit;border:0;border-radius:12px;padding:12px 16px;background:var(--main);color:#fff;cursor:pointer;min-height:48px;display:inline-flex;align-items:center;justify-content:center;text-align:center}
+button.sub,.btn.sub{background:transparent;color:var(--main);border:1.5px solid var(--main)}
+button.sub.on{background:var(--main);color:#fff}
+.ptrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;padding:8px;border-bottom:1px solid var(--line);border-radius:8px}
+.ptrow.act{background:rgba(31,95,168,.10)}
+.ptrow b{flex:1 1 100%;font-size:15px}
+.ptrow label{flex:1 1 70px}
+.ptrow .tapbtn{min-height:44px;padding:8px 14px}
+.nudge{display:flex;gap:6px}
+.nudge button{min-width:44px;min-height:44px;padding:6px}
+button.go{background:var(--accent);flex:1 1 100%;font-weight:700;font-size:18px}
+button:disabled{opacity:.4}
+input[type=file]{display:none}
+canvas{width:100%;height:auto;border-radius:10px;background:#000;display:block;touch-action:manipulation}
+.note{color:var(--sub);font-size:14px;margin:8px 0 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;font-size:14px;color:var(--sub)}
+input[type=number],input[type=text]{width:100%;font:inherit;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-height:44px}
+details summary{cursor:pointer;font-weight:600;padding:6px 0}
+.big{display:flex;gap:10px;flex-wrap:wrap}
+.big div{flex:1 1 140px;background:var(--bg);border-radius:12px;padding:10px 12px;text-align:center}
+.big b{display:block;font-size:34px;line-height:1.2;color:var(--main)}
+.big span{font-size:13px;color:var(--sub)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+td:last-child,th:last-child{text-align:right}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.gal img{width:100%;border-radius:8px;display:block}
+.gal small{color:var(--sub)}
+progress{width:100%;height:14px}
+#msg{min-height:1.5em}
+.bad{color:var(--ng)}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>噴霧角度測定 <span class="badge" id="swBadge">準備中</span></h1>
+<p class="note">試作 v0.2 ／ 動画・画像は端末内だけで処理します（外部へ送信しません）</p>
+
+<div class="card">
+  <h2>① 動画を用意する</h2>
+  <div class="row">
+    <label class="btn" for="file">動画ファイルを選ぶ</label>
+    <input type="file" id="file" accept="video/*">
+    <button class="sub" id="btnCam">カメラを起動</button>
+  </div>
+  <p class="note" id="srcInfo">動画ファイルを選ぶか、カメラを起動してください。</p>
+</div>
+
+<div class="card">
+  <h2>測定モード</h2>
+  <div class="row">
+    <button class="sub" id="mNo" style="flex:1">背景なし</button>
+    <button class="sub" id="mBg" style="flex:1">背景あり</button>
+  </div>
+  <p class="note">背景あり: 噴霧前の画像との差から縁を探します（板の穴や枠が消えて、薄い噴霧でも測りやすくなります）。</p>
+  <div id="bgPanel" class="hide" style="margin-top:10px">
+    <div class="row">
+      <button class="sub" id="btnBg">背景を撮る</button>
+      <button class="sub" id="btnBgClear">背景を消す</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="btn sub" for="bgfile">背景の動画ファイルを選ぶ</label><input type="file" id="bgfile" accept="video/*">
+    </div>
+    <p class="note">噴霧前の動画（2〜3秒）を、別ファイルで撮った場合は、こちらを選びます。噴霧中の動画は、①で選びます。2つは、同じ向き・同じ設定で撮ってください。</p>
+    <p class="note" id="bgInfo">背景: 未撮影</p>
+    <p class="note">カメラを固定し、噴霧前の状態を撮ります（設定値の「背景の撮影時間」秒）。撮影後は、カメラとiPadを動かさないでください。動画ファイルの場合は、動画の最初の「背景の撮影時間」秒を背景に使います。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>② 撮影位置の設定（先端・縮尺）</h2>
+  <div class="row" style="margin-bottom:8px">
+    <button class="sub" id="cPrev" style="flex:1">前回の設定を使う</button>
+    <button class="sub" id="cNew" style="flex:1">新しく設定する</button>
+  </div>
+  <p class="note" id="calInfo" style="margin:0 0 8px"></p>
+  <canvas id="pv" width="960" height="540"></canvas>
+  <div id="calPrev" class="hide" style="margin-top:10px">
+    <div class="row"><button class="sub" id="cGhost">前回の画像を重ねる OFF</button></div>
+    <p class="note">カメラ位置が前回と同じなら、前回の画像（薄く重なる）とぴったり合います。合わない時は、カメラ位置を合わせ直すか、「新しく設定する」にしてください。</p>
+  </div>
+  <div id="calNew" class="hide" style="margin-top:10px">
+    <p class="note" style="margin:0 0 8px">手順: 各行の「タップ」を押して画像の点を押し、右の拡大図（緑の十字）を見ながら、座標欄か矢印で微調整します。最後に「保存」。噴霧を出す前に行うと確実です。</p>
+    <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1 1 300px">
+        <div class="ptrow act" data-p="T"><b>① ノズル先端</b>
+          <button class="sub tapbtn" data-p="T">タップ</button>
+          <label>x<input type="number" id="tipX" step="0.5"></label><label>y<input type="number" id="tipY" step="0.5"></label>
+          <span class="nudge"><button class="sub nb" data-p="T" data-dx="-0.5" data-dy="0">◀</button><button class="sub nb" data-p="T" data-dx="0.5" data-dy="0">▶</button><button class="sub nb" data-p="T" data-dx="0" data-dy="-0.5">▲</button><button class="sub nb" data-p="T" data-dx="0" data-dy="0.5">▼</button></span>
+        </div>
+        <div class="ptrow" data-p="A"><b>② スケールの始点 A</b>
+          <button class="sub tapbtn" data-p="A">タップ</button>
+          <label>x<input type="number" id="aX" step="0.5"></label><label>y<input type="number" id="aY" step="0.5"></label>
+          <span class="nudge"><button class="sub nb" data-p="A" data-dx="-0.5" data-dy="0">◀</button><button class="sub nb" data-p="A" data-dx="0.5" data-dy="0">▶</button><button class="sub nb" data-p="A" data-dx="0" data-dy="-0.5">▲</button><button class="sub nb" data-p="A" data-dx="0" data-dy="0.5">▼</button></span>
+        </div>
+        <div class="ptrow" data-p="B"><b>③ スケールの終点 B</b>
+          <button class="sub tapbtn" data-p="B">タップ</button>
+          <label>x<input type="number" id="bX" step="0.5"></label><label>y<input type="number" id="bY" step="0.5"></label>
+          <span class="nudge"><button class="sub nb" data-p="B" data-dx="-0.5" data-dy="0">◀</button><button class="sub nb" data-p="B" data-dx="0.5" data-dy="0">▶</button><button class="sub nb" data-p="B" data-dx="0" data-dy="-0.5">▲</button><button class="sub nb" data-p="B" data-dx="0" data-dy="0.5">▼</button></span>
+        </div>
+        <div class="ptrow"><b>④ スケールの長さ（A〜Bの実長）</b>
+          <label>長さ [mm]<input type="number" id="scaleMm" step="any"></label>
+        </div>
+      </div>
+      <div style="flex:0 0 160px"><canvas id="loupe" width="160" height="160" style="width:160px;height:160px"></canvas><p class="note" style="margin:4px 0 0;text-align:center">拡大図（中心＝選択中の点）</p></div>
+    </div>
+    <p class="note" id="scaleOut" style="margin:8px 0">縮尺: 未設定</p>
+    <div class="row"><button id="btnSaveCal">⑤ この設定を保存</button></div>
+    <p class="note">座標は、横1920に換算した値です。縮尺は、ノイズカット距離と区間の長さ（mm）にだけ影響します。角度そのものは、縮尺に左右されません。スケールは、噴霧に近い手前の面に貼るほど、正確です。</p>
+  </div>
+  <p class="note" id="tapHint">オレンジの横線がノイズカット位置。赤い範囲で外縁に接線を当てます。</p>
+  <details>
+    <summary>設定値</summary>
+    <div class="grid">
+      <label>ノイズカット距離 [mm]<input type="number" id="cutMm" step="any"></label>
+      <label>接線を当てる区間 [mm]<input type="number" id="lenMm" step="any"></label>
+      <label>換算 [px/mm]<input type="number" id="pxPerMm" step="any"></label>
+      <label>目視値 [°]（任意）<input type="number" id="truth" step="any"></label>
+      <label>探索 左端 x [px]<input type="number" id="xMin" step="1"></label>
+      <label>探索 右端 x [px]<input type="number" id="xMax" step="1"></label>
+      <label>測定間隔 [秒]<input type="number" id="intervalSec" step="0.05" min="0.05"></label>
+      <label>背景の撮影時間 [秒]<input type="number" id="bgSec" step="0.5" min="0.5"></label>
+      <label>動画: 測定の開始 [秒]<input type="number" id="startSec" step="0.5" min="0"></label>
+      <label>動画: 測定の長さ [秒]（0=最後まで）<input type="number" id="durSec" step="1" min="0"></label>
+      <label>カメラずれの警告値<input type="number" id="shiftWarn" step="0.5" min="1"></label>
+    </div>
+    <p class="note">px は 横1920 に換算した座標です（動画の大きさに関係なく同じ値）。<br>先端から線までの距離＝ノイズカット距離。換算は「先端〜ノイズカット線＝65mm」を314pxとした仮置き値です。</p>
+    <div class="row" style="margin-top:8px"><button class="sub" id="btnReset">初期値に戻す</button></div>
+  </details>
+</div>
+
+<div class="card">
+  <h2>③ 調整して、測定する</h2>
+  <div class="grid" style="margin-bottom:10px">
+    <label>測定時間 [秒]（カメラ撮影）<input type="number" id="camSec" step="1" min="5"></label>
+    <div style="align-self:end"><button class="sub" id="btnLive" style="width:100%">調整ライブ OFF</button></div>
+  </div>
+  <div id="liveBox" class="hide" style="margin-bottom:10px">
+    <p class="note" id="liveInfo" style="margin:0 0 6px"></p>
+    <canvas id="liveChart" width="900" height="200" style="background:#fff"></canvas>
+    <p class="note">調整ライブ: 噴霧を安定させている間の、角度と噴霧量の変化を表示します（直近2分）。安定したと判断したら「測定開始」を押してください。</p>
+  </div>
+  <div class="row">
+    <button class="go" id="btnRun" disabled>測定開始</button>
+    <button class="sub hide" id="btnStop">中止</button>
+  </div>
+  <progress id="prog" value="0" max="1" class="hide"></progress>
+  <p class="note" id="msg"></p>
+</div>
+
+<div class="card hide" id="resCard">
+  <h2>結果</h2>
+  <div class="big">
+    <div><b id="rMed">-</b><span>中央値 [°]</span></div>
+    <div><b id="rMean">-</b><span>平均値 [°]</span></div>
+    <div><b id="rStd">-</b><span>標準偏差 [°]</span></div>
+  </div>
+  <table style="margin-top:10px" id="rTable"></table>
+  <h2 style="margin-top:16px">フレームごとの角度</h2>
+  <canvas id="chart" width="900" height="420" style="background:#fff"></canvas>
+  <div class="row" style="margin-top:12px">
+    <button id="btnCsv">CSV・まとめを保存/共有</button>
+    <button class="sub" id="btnImgs">画像を保存/共有</button>
+  </div>
+  <h2 style="margin-top:16px">元画像と角度入り画像</h2>
+  <p class="note">画像を長押しすると「写真に追加」できます。</p>
+  <div class="gal" id="gal"></div>
+</div>
+</main>
+
+<script>
+'use strict';
+/* ===== 噴霧角度測定 Web版（試作）=====
+   手法: 先端 → ノイズカット(cut) → その下の区間で左右の外縁(明るさ変化が最も急な位置)に
+         Huber直線近似 → 鉛直からの角度の和 = 噴霧角度。フレームごとに出して 中央値/平均/標準偏差。
+   座標は「横1920」換算の px。*/
+const REF_W = 1920, PS = 0.5;               // 基準幅, 処理用の縮小率
+const DEF = {tipX:958, tipY:308, pxPerMm:4.8308, cutMm:65, lenMm:52, xMin:190, xMax:1720,
+             closePx:25, blurPx:8, rowStep:4, gradSigma:3, gradGap:100,
+             intervalSec:0.1, camSec:30, truth:'', sampleEvery:20,
+             useBg:false, bgSec:3, startSec:0, durSec:0, shiftWarn:8, scaleMm:100, calMode:'new'};
+let S = loadS();
+function loadS(){ try{ return Object.assign({}, DEF, JSON.parse(localStorage.getItem('spray_S')||'{}')); }catch(e){ return Object.assign({}, DEF); } }
+function saveS(){ try{ localStorage.setItem('spray_S', JSON.stringify(S)); }catch(e){} }
+const $ = id => document.getElementById(id);
+function getP(){ return {tipX:S.tipX, tipY:S.tipY, cutPx:S.cutMm*S.pxPerMm, lenPx:S.lenMm*S.pxPerMm,
+  xMin:S.xMin, xMax:S.xMax, closePx:S.closePx, blurPx:S.blurPx, rowStep:S.rowStep, gradSigma:S.gradSigma, gradGap:S.gradGap}; }
+
+/* ---------- 画像処理 ---------- */
+function gaussKernel(sigma){
+  const r = Math.max(1, Math.ceil(sigma*3)), k = new Float32Array(2*r+1); let s = 0;
+  for(let i=-r;i<=r;i++){ k[i+r] = Math.exp(-i*i/(2*sigma*sigma)); s += k[i+r]; }
+  for(let i=0;i<k.length;i++) k[i] /= s;
+  return {k, r};
+}
+function morph(src, W, H, r, isMax){            // 楕円の膨張(isMax) / 収縮
+  const N = W*H, hw = [];
+  for(let dy=-r;dy<=r;dy++) hw.push(Math.round(Math.sqrt(r*r-dy*dy)));
+  const hp = [src];
+  for(let h=1;h<=r;h++){
+    const prev = hp[h-1], cur = new Uint8Array(N);
+    for(let y=0;y<H;y++){ const o = y*W;
+      for(let x=0;x<W;x++){
+        let v = prev[o+x];
+        if(x-h>=0){ const a = src[o+x-h]; if(isMax ? a>v : a<v) v = a; }
+        if(x+h<W){ const a = src[o+x+h]; if(isMax ? a>v : a<v) v = a; }
+        cur[o+x] = v;
+      } }
+    hp.push(cur);
+  }
+  const out = new Uint8Array(N);
+  for(let y=0;y<H;y++){
+    for(let x=0;x<W;x++){
+      let v = isMax ? 0 : 255;
+      for(let dy=-r;dy<=r;dy++){
+        const yy = y+dy; if(yy<0||yy>=H) continue;
+        const a = hp[hw[dy+r]][yy*W+x];
+        if(isMax ? a>v : a<v) v = a;
+      }
+      out[y*W+x] = v;
+    }
+  }
+  return out;
+}
+function huberFit(pts){                           // x = m*y + b （OpenCV fitLine の Huber と同じ: 垂直距離の重み付き最小二乗）
+  const n = pts.length, C = 1.345; const w = new Float64Array(n).fill(1);
+  let dx = 0, dy = 1, x0 = 0, y0 = 0;
+  for(let it=0; it<20; it++){
+    let sw=0, sx=0, sy=0;
+    for(let i=0;i<n;i++){ sw+=w[i]; sx+=w[i]*pts[i][0]; sy+=w[i]*pts[i][1]; }
+    x0 = sx/sw; y0 = sy/sw;
+    let dxx=0, dyy=0, dxy=0;
+    for(let i=0;i<n;i++){ const a = pts[i][0]-x0, c = pts[i][1]-y0; dxx+=w[i]*a*a; dyy+=w[i]*c*c; dxy+=w[i]*a*c; }
+    const t = 0.5*Math.atan2(2*dxy, dxx-dyy), ndx = Math.cos(t), ndy = Math.sin(t);
+    const conv = it>0 && Math.abs(ndx*dy-ndy*dx)<0.001*0.01;
+    dx = ndx; dy = ndy;
+    if(conv) break;
+    for(let i=0;i<n;i++){ const r = Math.abs((pts[i][0]-x0)*dy-(pts[i][1]-y0)*dx); w[i] = r<=C ? 1 : C/r; }
+  }
+  if(Math.abs(dy)<1e-6) return null;
+  const m = dx/dy; return {m, b: x0-m*y0};
+}
+function measureFrame(id, pw, ph, P, bg){      // bg: 噴霧前の背景(グレー, 処理サイズ)があれば差分で測る
+  const s = PS, d = id.data;
+  const y0 = Math.floor((P.tipY+P.cutPx)*s), y1 = Math.min(ph-1, Math.floor((P.tipY+P.cutPx+P.lenPx)*s));
+  const xa = Math.floor(P.xMin*s), xb = Math.min(pw, Math.floor(P.xMax*s));
+  if(y1-y0<4 || xb-xa<40) return null;
+  const kc = Math.max(3, Math.floor(P.closePx*s)|1), rc = (kc-1)/2;
+  const gk = gaussKernel(Math.max(0.5, P.blurPx*s)), gr = gk.r, marg = rc+gr+2;
+  const ry0 = Math.max(0,y0-marg), ry1 = Math.min(ph-1,y1+marg), rx0 = Math.max(0,xa-marg), rx1 = Math.min(pw,xb+marg);
+  const W = rx1-rx0, H = ry1-ry0+1;
+  const gray = new Uint8Array(W*H); let amt = 0;
+  for(let y=0;y<H;y++){ let o = ((ry0+y)*pw+rx0)*4, ob = (ry0+y)*pw+rx0;
+    for(let x=0;x<W;x++,o+=4,ob++){
+      let g = (299*d[o]+587*d[o+1]+114*d[o+2])/1000;
+      if(bg){ g -= bg[ob]; if(g<0) g = 0; }          // 噴霧で明るくなった分だけを残す
+      gray[y*W+x] = g; amt += g; } }
+  const cl = bg ? gray : morph(morph(gray,W,H,rc,true),W,H,rc,false);   // 背景ありは穴埋め不要
+  const hb = new Float32Array(W*H), K = gk.k;
+  for(let y=0;y<H;y++){ const o = y*W;
+    for(let x=0;x<W;x++){ let a = 0;
+      for(let j=-gr;j<=gr;j++){ let xx = x+j; if(xx<0) xx=0; else if(xx>=W) xx=W-1; a += K[j+gr]*cl[o+xx]; }
+      hb[o+x] = a; } }
+  const n = xb-xa, ox = xa-rx0, tx = Math.trunc(P.tipX*s);
+  const sg = gaussKernel(Math.max(0.5, P.gradSigma*s)), sk = sg.k, sr = sg.r;
+  const row = new Float32Array(n), sm = new Float32Array(n), df = new Float32Array(n);
+  const L = [], R = [], step = Math.max(1, Math.trunc(P.rowStep*s));
+  for(let y=y0; y<=y1; y+=step){
+    const cy = y-ry0;
+    for(let x=0;x<n;x++){ let a = 0;
+      for(let j=-gr;j<=gr;j++){ let yy = cy+j; if(yy<0) yy=0; else if(yy>=H) yy=H-1; a += K[j+gr]*hb[yy*W+ox+x]; }
+      row[x] = a; }
+    for(let x=0;x<n;x++){ let a = 0;
+      for(let j=-sr;j<=sr;j++){ let xx = x+j; if(xx<0) xx=-xx; if(xx>=n) xx=2*(n-1)-xx; if(xx<0) xx=0; a += sk[j+sr]*row[xx]; }
+      sm[x] = a; }
+    df[0] = sm[1]-sm[0]; df[n-1] = sm[n-1]-sm[n-2];
+    for(let x=1;x<n-1;x++) df[x] = (sm[x+1]-sm[x-1])/2;
+    const gap = Math.trunc(Math.min(P.gradGap, Math.max(15, 0.6*(y/s-P.tipY)))*s);
+    const nl = tx-xa-gap, nr = xb-tx-gap;
+    if(nl>5 && nr>5){
+      let i = 0; for(let x=1;x<nl;x++) if(df[x]>df[i]) i = x;
+      let j = n-nr; for(let x=n-nr+1;x<n;x++) if(df[x]<df[j]) j = x;
+      if(df[i]>0.05 && df[j]<-0.05){ L.push([(xa+i)/s, y/s]); R.push([(xa+j)/s, y/s]); }
+    }
+  }
+  if(L.length<8 || R.length<8) return null;
+  const fl = huberFit(L), fr = huberFit(R); if(!fl||!fr) return null;
+  const aL = Math.atan(-fl.m)*180/Math.PI, aR = Math.atan(fr.m)*180/Math.PI;
+  const apex = Math.abs(fl.m-fr.m)>1e-9 ? (fr.b-fl.b)/(fl.m-fr.m) : null;
+  return {angle:aL+aR, L:aL, R:aR, fitL:fl, fitR:fr, apexY:apex, ptsL:L, ptsR:R, amount:amt/(W*H)};
+}
+
+/* ---------- 画面・動画 ---------- */
+const vid = document.createElement('video'); vid.muted = true; vid.playsInline = true; vid.setAttribute('playsinline','');
+const pv = $('pv'), pctx = pv.getContext('2d');
+const proc = document.createElement('canvas'), xctx = proc.getContext('2d', {willReadFrequently:true});
+let srcMode = null, stream = null, running = false, stopFlag = false, tapMode = null, tapA = null, lastRes = null;
+let BG = null, lastShift = 0, live = false, hist = [], wl = null;
+let CAL = null, calA = null, calB = null, calAct = 'T', ghostOn = false, ghostCv = null, lastRefShift = null;
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+let results = [], samples = [];
+
+function refH(){ return REF_W*vid.videoHeight/vid.videoWidth; }
+function procSize(el){ el = el || vid; const pw = Math.round(REF_W*PS); return {pw, ph: Math.round(pw*el.videoHeight/el.videoWidth)}; }
+function grabProc(el){
+  el = el || vid;
+  const {pw, ph} = procSize(el);
+  if(proc.width!==pw || proc.height!==ph){ proc.width = pw; proc.height = ph; }
+  xctx.drawImage(el, 0, 0, pw, ph);
+  return {id: xctx.getImageData(0,0,pw,ph), pw, ph};
+}
+function grayFull(id){ const d = id.data, n = id.width*id.height, g = new Float32Array(n);
+  for(let i=0,o=0;i<n;i++,o+=4) g[i] = (299*d[o]+587*d[o+1]+114*d[o+2])/1000; return g; }
+function bgValid(pw, ph){ return !!(S.useBg && BG && BG.pw===pw && BG.ph===ph); }
+// 背景とのずれの目安: ノズル先端より上(噴霧が届かない所)の、背景との明るさの差の平均
+function shiftScore(id, pw, bg){
+  const d = id.data, s = PS, y0 = Math.floor(S.tipY*0.5*s), y1 = Math.floor(S.tipY*0.95*s);
+  const rs = [[Math.floor(100*s), Math.floor((S.tipX-200)*s)], [Math.floor((S.tipX+200)*s), Math.floor(1800*s)]];
+  let a = 0, n = 0;
+  for(let y=y0;y<y1;y++) for(const r of rs) for(let x=r[0];x<r[1];x+=2){ const o = (y*pw+x)*4;
+    a += Math.abs((299*d[o]+587*d[o+1]+114*d[o+2])/1000 - bg[y*pw+x]); n++; }
+  return n ? a/n : 0;
+}
+function analyze(){
+  const g = grabProc(), bg = bgValid(g.pw, g.ph) ? BG.data : null;
+  lastShift = bg ? shiftScore(g.id, g.pw, bg) : 0;
+  lastRefShift = (S.calMode==='prev' && CAL && CAL.pw===g.pw && CAL.ph===g.ph) ? shiftScore(g.id, g.pw, CAL.ref) : null;
+  return measureFrame(g.id, g.pw, g.ph, getP(), bg);
+}
+function drawAnn(ctx, k, res, label){
+  const P = getP(), tx = P.tipX*k, ty = P.tipY*k, cy = (P.tipY+P.cutPx)*k, ye = (P.tipY+P.cutPx+P.lenPx)*k, W = ctx.canvas.width;
+  const lw = Math.max(2, 3*k), OR = '#ff8c00', RD = '#ff3c3c', BL = '#50aaff';
+  ctx.lineWidth = lw; ctx.strokeStyle = OR;
+  ctx.beginPath(); ctx.moveTo(tx-60*k,ty); ctx.lineTo(tx+60*k,ty); ctx.stroke();
+  ctx.strokeStyle = RD; ctx.beginPath(); ctx.arc(tx,ty,7*k,0,7); ctx.stroke();
+  ctx.strokeStyle = OR; ctx.beginPath(); ctx.moveTo(200*k,cy); ctx.lineTo(W-200*k,cy); ctx.stroke();
+  ctx.strokeStyle = BL; ctx.beginPath(); ctx.moveTo(tx-120*k,ty); ctx.lineTo(tx-120*k,cy); ctx.stroke();
+  ctx.fillStyle = BL; ctx.font = (30*k)+'px sans-serif'; ctx.fillText('ノイズカット '+S.cutMm+'mm', tx-110*k, (ty+cy)/2);
+  let txt = '測定できません';
+  if(res){
+    ctx.fillStyle = '#ffff00';
+    for(const p of res.ptsL.concat(res.ptsR)){ ctx.beginPath(); ctx.arc(p[0]*k,p[1]*k,3*k,0,7); ctx.fill(); }
+    for(const f of [res.fitL,res.fitR]){
+      ctx.strokeStyle = OR; ctx.lineWidth = Math.max(1.5,2*k);
+      ctx.beginPath(); ctx.moveTo((f.m*P.tipY+f.b)*k,ty); ctx.lineTo((f.m*(P.tipY+P.cutPx)+f.b)*k,cy); ctx.stroke();
+      ctx.strokeStyle = RD; ctx.lineWidth = Math.max(3,5*k);
+      ctx.beginPath(); ctx.moveTo((f.m*(P.tipY+P.cutPx)+f.b)*k,cy); ctx.lineTo((f.m*(P.tipY+P.cutPx+P.lenPx)+f.b)*k,ye); ctx.stroke();
+    }
+    txt = '角度 '+res.angle.toFixed(1)+'°  (左 '+res.L.toFixed(1)+'° + 右 '+res.R.toFixed(1)+'°)';
+  }
+  const fs = 40*k; ctx.font = 'bold '+fs+'px sans-serif';
+  const w = ctx.measureText(txt).width;
+  ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(10*k, 20*k, w+30*k, fs*(label?2.4:1.5));
+  ctx.fillStyle = '#fff'; ctx.fillText(txt, 25*k, 20*k+fs*1.05);
+  if(label){ ctx.font = (28*k)+'px sans-serif'; ctx.fillStyle = '#ccc'; ctx.fillText(label, 25*k, 20*k+fs*2.0); }
+}
+function drawPreview(res){
+  if(!vid.videoWidth) return;
+  const cw = Math.min(vid.videoWidth, 1280), ch = Math.round(cw*vid.videoHeight/vid.videoWidth);
+  if(pv.width!==cw || pv.height!==ch){ pv.width = cw; pv.height = ch; }
+  pctx.drawImage(vid, 0, 0, cw, ch);
+  if(ghostOn && CAL){ const sz = procSize(); if(CAL.pw===sz.pw && CAL.ph===sz.ph){ pctx.globalAlpha = 0.45; pctx.drawImage(ghostCanvas(), 0, 0, cw, ch); pctx.globalAlpha = 1; } }
+  drawAnn(pctx, cw/REF_W, res, '');
+  const k = cw/REF_W;
+  if(calA || calB){
+    pctx.strokeStyle = '#0f0'; pctx.fillStyle = '#0f0'; pctx.lineWidth = 2; pctx.font = 'bold 22px sans-serif';
+    if(calA && calB){ pctx.beginPath(); pctx.moveTo(calA.x*k,calA.y*k); pctx.lineTo(calB.x*k,calB.y*k); pctx.stroke(); }
+    for(const [p,n] of [[calA,'A'],[calB,'B']]) if(p){ pctx.beginPath(); pctx.arc(p.x*k,p.y*k,7,0,7); pctx.stroke(); pctx.fillText(n, p.x*k+10, p.y*k-8); }
+  }
+  drawLoupe();
+}
+function ghostCanvas(){
+  if(ghostCv || !CAL) return ghostCv;
+  const c = document.createElement('canvas'); c.width = CAL.pw; c.height = CAL.ph;
+  const g = c.getContext('2d'), im = g.createImageData(CAL.pw, CAL.ph);
+  for(let i=0,o=0;i<CAL.ref.length;i++,o+=4){ const v = CAL.ref[i]; im.data[o] = im.data[o+1] = im.data[o+2] = v; im.data[o+3] = 255; }
+  g.putImageData(im,0,0); ghostCv = c; return c;
+}
+/* ---------- 撮影位置の設定（先端・縮尺）---------- */
+function calTarget(){ return calAct==='T' ? {x:S.tipX, y:S.tipY} : (calAct==='A' ? calA : calB); }
+function drawLoupe(){
+  const c = $('loupe'); if(!c || !vid.videoWidth) return;
+  const g = c.getContext('2d'), p = calTarget() || {x:S.tipX, y:S.tipY}, k = vid.videoWidth/REF_W, half = 20*k;
+  g.imageSmoothingEnabled = false; g.fillStyle = '#000'; g.fillRect(0,0,160,160);
+  g.drawImage(vid, p.x*k-half, p.y*k-half, half*2, half*2, 0, 0, 160, 160);
+  g.strokeStyle = '#0f0'; g.lineWidth = 1; g.beginPath(); g.moveTo(80,0); g.lineTo(80,160); g.moveTo(0,80); g.lineTo(160,80); g.stroke();
+}
+function syncPts(){
+  $('aX').value = calA ? +calA.x.toFixed(1) : ''; $('aY').value = calA ? +calA.y.toFixed(1) : '';
+  $('bX').value = calB ? +calB.x.toFixed(1) : ''; $('bY').value = calB ? +calB.y.toFixed(1) : '';
+}
+function applyScale(){
+  const out = $('scaleOut');
+  if(!calA || !calB){ out.textContent = '縮尺: 点Aと点Bを指定してください。'; return; }
+  const mm = +S.scaleMm; if(!(mm>0)){ out.textContent = '縮尺: スケールの長さ[mm]を入力してください。'; return; }
+  const px = Math.hypot(calB.x-calA.x, calB.y-calA.y); S.pxPerMm = +(px/mm).toFixed(4); saveS(); syncFields();
+  out.textContent = '縮尺: '+S.pxPerMm+' px/mm（A〜B '+px.toFixed(1)+'px = '+mm+'mm）　ノイズカット '+S.cutMm+'mm = '+(S.cutMm*S.pxPerMm).toFixed(0)+'px';
+}
+function nudge(p, dx, dy){
+  calAct = p; setAct();
+  if(p==='T'){ S.tipX = +(S.tipX+dx).toFixed(1); S.tipY = +(S.tipY+dy).toFixed(1); saveS(); syncFields(); }
+  else { const t = p==='A' ? calA : calB; if(!t) return; t.x += dx; t.y += dy; syncPts(); applyScale(); }
+  drawPreview(null);
+}
+function showCal(){
+  $('calInfo').textContent = CAL ? '保存済みの設定: 縮尺 '+CAL.pxPerMm+' px/mm（スケール '+CAL.scaleMm+'mm）、先端 ('+CAL.tipX+', '+CAL.tipY+')、'+new Date(CAL.time).toLocaleString()+' 保存'
+                                 : '保存済みの設定はありません。「新しく設定する」で作ってください。';
+}
+async function saveCal(){
+  if(!srcMode){ $('tapHint').textContent = '先に動画かカメラを開いてください。'; return; }
+  const g = grabProc(), f = grayFull(g.id), ref = new Uint8Array(f.length); for(let i=0;i<f.length;i++) ref[i] = Math.round(f[i]);
+  CAL = {tipX:S.tipX, tipY:S.tipY, pxPerMm:S.pxPerMm, scaleMm:S.scaleMm, pw:g.pw, ph:g.ph, time:Date.now(), ref};
+  ghostCv = null; await idbSet('cal', CAL); showCal();
+  $('tapHint').textContent = 'この設定（先端・縮尺・撮影位置の画像）を保存しました。次回は「前回の設定を使う」で呼び出せます。';
+}
+function setCalMode(m){
+  if(m==='prev' && !CAL){ m = 'new'; $('tapHint').textContent = '保存された設定がないので、「新しく設定する」を使います。'; }
+  S.calMode = m; saveS();
+  $('cPrev').classList.toggle('on', m==='prev'); $('cNew').classList.toggle('on', m==='new');
+  $('calPrev').classList.toggle('hide', m!=='prev'); $('calNew').classList.toggle('hide', m!=='new');
+  if(m==='prev' && CAL){ S.tipX = CAL.tipX; S.tipY = CAL.tipY; S.pxPerMm = CAL.pxPerMm; S.scaleMm = CAL.scaleMm; saveS(); syncFields(); }
+  if(srcMode) drawPreview(null);
+}
+function onReady(info){
+  $('srcInfo').textContent = info + '（' + vid.videoWidth + '×' + vid.videoHeight + '）';
+  $('btnRun').disabled = false;
+  $('btnRun').textContent = srcMode==='camera' ? S.camSec+'秒 撮影して測定' : '測定開始';
+  drawPreview(null);
+}
+function stopCam(){ live = false; if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; } if(wl){ wl.release().catch(()=>{}); wl = null; } }
+async function lockScreen(){ try{ if('wakeLock' in navigator) wl = await navigator.wakeLock.request('screen'); }catch(e){} }
+async function loadFile(file){
+  stopCam(); srcMode = 'file'; vid.srcObject = null; $('liveBox').classList.add('hide'); setLiveBtn();
+  vid.src = URL.createObjectURL(file); vid.preload = 'auto';
+  await new Promise((ok,ng)=>{ vid.onloadeddata = ok; vid.onerror = ()=>ng(new Error('この動画は読み込めません')); });
+  await seek(Math.min(0.05, vid.duration/2));
+  onReady(file.name + ' ／ ' + vid.duration.toFixed(1) + '秒');
+}
+function seekEl(el, t){
+  return new Promise(ok=>{ const to = setTimeout(ok, 4000); el.onseeked = ()=>{ clearTimeout(to); ok(); }; el.currentTime = t; });
+}
+function seek(t){ return seekEl(vid, t); }
+async function startCam(){
+  try{
+    stopCam(); vid.removeAttribute('src');
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:false});
+    vid.srcObject = stream; await vid.play(); srcMode = 'camera';
+    await new Promise(r=>{ if(vid.videoWidth) r(); else vid.onloadedmetadata = r; });
+    onReady('カメラ'); lockScreen(); $('liveBox').classList.remove('hide'); camLoop(); startLive();
+  }catch(e){ $('srcInfo').innerHTML = '<span class="bad">カメラを使えません: '+e.message+'（HTTPSで開いているか、カメラの許可を確認してください）</span>'; }
+}
+function camLoop(){ if(srcMode!=='camera' || !stream) return; if(!running && !live) drawPreview(null); requestAnimationFrame(camLoop); }
+
+/* ---------- 背景（噴霧前）---------- */
+function idb(){ return new Promise((ok,ng)=>{ const r = indexedDB.open('spray',1); r.onupgradeneeded = ()=>r.result.createObjectStore('kv'); r.onsuccess = ()=>ok(r.result); r.onerror = ()=>ng(r.error); }); }
+async function idbSet(k,v){ try{ const db = await idb(); await new Promise((ok,ng)=>{ const t = db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete = ok; t.onerror = ()=>ng(t.error); }); }catch(e){} }
+async function idbGet(k){ try{ const db = await idb(); return await new Promise((ok,ng)=>{ const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = ()=>ok(q.result); q.onerror = ()=>ng(q.error); }); }catch(e){ return null; } }
+async function idbDel(k){ try{ const db = await idb(); await new Promise((ok,ng)=>{ const t = db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete = ok; t.onerror = ()=>ng(t.error); }); }catch(e){} }
+function showBg(){
+  $('bgInfo').textContent = BG ? '背景: 保存済み（'+BG.src+'・'+BG.n+'枚の平均・'+new Date(BG.time).toLocaleTimeString()+'）' : '背景: 未撮影';
+}
+function setBg(acc, n, pw, ph, src, ext){
+  const data = new Uint8Array(acc.length); for(let i=0;i<acc.length;i++) data[i] = Math.round(acc[i]/n);
+  BG = {pw, ph, data, n, src, ext: !!ext, time: Date.now()}; if(!ext) idbSet('bg', BG); showBg();   // 別ファイルの背景は、保存しない（別の動画に誤って使わないため）
+}
+async function bgFromExt(file){
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.setAttribute('playsinline',''); v.preload = 'auto';
+  const url = URL.createObjectURL(file); v.src = url;
+  await new Promise((ok,ng)=>{ v.onloadeddata = ok; v.onerror = ()=>ng(new Error('背景の動画を読み込めません')); });
+  const end = Math.min(Math.max(0.5, +S.bgSec||3), v.duration), sz = procSize(v);
+  const acc = new Float32Array(sz.pw*sz.ph); let n = 0;
+  for(let t=0; t<end; t+=0.1){
+    await seekEl(v, Math.min(t+0.02, v.duration-0.001));
+    const f = grayFull(grabProc(v).id); for(let i=0;i<f.length;i++) acc[i] += f[i]; n++;
+    $('bgInfo').textContent = '背景の動画を処理中… '+t.toFixed(1)+' / '+end.toFixed(1)+'秒';
+  }
+  URL.revokeObjectURL(url);
+  setBg(acc, n, sz.pw, sz.ph, '背景の動画 '+file.name+'（先頭'+end.toFixed(1)+'秒）', true);
+}
+async function captureBg(){
+  if(srcMode!=='camera'){ $('bgInfo').textContent = '背景の撮影は、カメラ使用中に行います。動画ファイルの場合は、動画の先頭が背景になります。'; return; }
+  if(running) return;
+  const sec = Math.max(0.5, +S.bgSec||3); live = false; await sleep(300);
+  let acc = null, n = 0, sz = procSize(); const t0 = performance.now();
+  while((performance.now()-t0)/1000 < sec){
+    const f = grayFull(grabProc().id); if(!acc) acc = new Float32Array(f.length);
+    for(let i=0;i<f.length;i++) acc[i] += f[i]; n++;
+    $('bgInfo').textContent = '背景を撮影中… '+((performance.now()-t0)/1000).toFixed(1)+' / '+sec+'秒（カメラを動かさないでください）';
+    await sleep(100);
+  }
+  setBg(acc, n, sz.pw, sz.ph, 'カメラ'); startLive();
+}
+async function bgFromFile(){
+  const end = Math.min(Math.max(0.5, +S.bgSec||3), vid.duration), sz = procSize();
+  const acc = new Float32Array(sz.pw*sz.ph); let n = 0;
+  for(let t=0; t<end; t+=0.1){
+    await seek(Math.min(t+0.02, vid.duration-0.001));
+    const f = grayFull(grabProc().id); for(let i=0;i<f.length;i++) acc[i] += f[i]; n++;
+    setMsg('背景を作成中… '+t.toFixed(1)+' / '+end.toFixed(1)+'秒');
+  }
+  setBg(acc, n, sz.pw, sz.ph, '動画の先頭'+end.toFixed(1)+'秒');
+}
+
+/* ---------- 調整ライブ ---------- */
+function setLiveBtn(){ const b = $('btnLive'); b.textContent = live ? '調整ライブ ON' : '調整ライブ OFF'; b.classList.toggle('on', live); }
+function startLive(){ if(live || srcMode!=='camera' || running) return; live = true; setLiveBtn(); liveLoop(); }
+async function liveLoop(){
+  hist = []; const t0 = performance.now();
+  while(live && srcMode==='camera' && !running){
+    const res = analyze(), t = (performance.now()-t0)/1000;
+    hist.push({t, a: res?res.angle:null, m: res?res.amount:null, sh: lastShift});
+    hist = hist.filter(h=>t-h.t<=120);
+    drawPreview(res); updateLive(res);
+    await sleep(200);
+  }
+  live = false; setLiveBtn();
+}
+function updateLive(res){
+  const now = hist[hist.length-1].t, rec = hist.filter(h=>now-h.t<=10 && h.a!==null);
+  let txt = '現在 '+(res?res.angle.toFixed(1)+'°':'—');
+  if(rec.length>=5){
+    const a = rec.map(h=>h.a), mean = a.reduce((x,y)=>x+y,0)/a.length, sd = Math.sqrt(a.reduce((x,y)=>x+(y-mean)**2,0)/(a.length-1));
+    const m = rec.map(h=>h.m), mm = m.reduce((x,y)=>x+y,0)/m.length, ch = (Math.max(...m)-Math.min(...m))/Math.max(1e-6,mm)*100;
+    txt += ' ／ 直近10秒: 平均 '+mean.toFixed(1)+'°、ばらつき(標準偏差) '+sd.toFixed(1)+'°、噴霧量の変動 '+ch.toFixed(0)+'%';
+  }
+  if(lastRefShift!==null) txt += ' ／ 前回位置との差 '+lastRefShift.toFixed(1)+(lastRefShift>S.shiftWarn ? '（ずれています）' : '（一致）');
+  if(S.useBg && !bgValid(procSize().pw, procSize().ph)) txt += ' ／ ※背景が未撮影のため、背景なしで測っています';
+  else if(S.useBg && lastShift>S.shiftWarn) txt += ' ／ ⚠ 背景との差が大きい（カメラが動いたか、明るさが変わった可能性: '+lastShift.toFixed(1)+'）';
+  $('liveInfo').textContent = txt; drawLiveChart();
+}
+function drawLiveChart(){
+  const c = $('liveChart'), g = c.getContext('2d'), W = c.width, H = c.height, M = 46;
+  g.fillStyle = '#fff'; g.fillRect(0,0,W,H);
+  const v = hist.filter(h=>h.a!==null); if(v.length<2) return;
+  const a = v.map(h=>h.a); let lo = Math.min(...a)-2, hi = Math.max(...a)+2;
+  const t1 = hist[hist.length-1].t, t0 = Math.max(0, t1-120), X = t => M+(W-M-10)*(t-t0)/Math.max(10,t1-t0), Y = y => H-24-(H-34)*(y-lo)/(hi-lo);
+  g.font = '16px sans-serif'; g.fillStyle = '#666'; g.strokeStyle = '#ddd';
+  for(let i=0;i<=4;i++){ const y = lo+(hi-lo)*i/4; g.beginPath(); g.moveTo(M,Y(y)); g.lineTo(W-10,Y(y)); g.stroke(); g.fillText(y.toFixed(0)+'°', 4, Y(y)+5); }
+  g.strokeStyle = '#2e75b6'; g.lineWidth = 2; g.beginPath(); v.forEach((h,i)=>{ i ? g.lineTo(X(h.t),Y(h.a)) : g.moveTo(X(h.t),Y(h.a)); }); g.stroke();
+  g.fillStyle = '#666'; g.fillText('角度の推移（直近2分）', M+6, 16);
+}
+
+/* ---------- 測定 ---------- */
+function setMsg(t){ $('msg').textContent = t; }
+async function savePair(t, res, idx){
+  const vw = vid.videoWidth, vh = vid.videoHeight, cw = Math.min(vw, 1920), ch = Math.round(cw*vh/vw);
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const g = c.getContext('2d'); g.drawImage(vid, 0, 0, cw, ch);
+  const org = await new Promise(r=>c.toBlob(r,'image/jpeg',0.9));
+  drawAnn(g, cw/REF_W, res, 't='+t.toFixed(1)+'s');
+  const ann = await new Promise(r=>c.toBlob(r,'image/jpeg',0.9));
+  return {t, org, ann, angle: res?res.angle:null};
+}
+async function run(){
+  if(running) return;
+  live = false; await sleep(300);
+  if(S.useBg){
+    if(srcMode==='camera'){ const sz = procSize(); if(!bgValid(sz.pw, sz.ph)){ setMsg('背景がありません。先に「背景を撮る」を押してください（画面サイズが変わった場合も撮り直しが必要です）。'); startLive(); return; } }
+    else if(BG && BG.ext){ const sz = procSize(); if(!bgValid(sz.pw, sz.ph)){ setMsg('背景の動画と噴霧の動画で、画面の縦横サイズが違います。同じ向き・同じ設定で撮った動画を選んでください。'); return; } }
+    else await bgFromFile();
+  }
+  running = true; stopFlag = false; results = []; samples = []; lastRes = null;
+  $('btnRun').disabled = true; $('btnStop').classList.remove('hide'); $('prog').classList.remove('hide'); $('resCard').classList.add('hide');
+  const iv = Math.max(0.05, +S.intervalSec||0.1), cam = srcMode==='camera';
+  const headBg = S.useBg && !(BG && BG.ext);                                          // 同じ動画の先頭を背景に使う場合
+  const tStart = cam ? 0 : Math.max(+S.startSec||0, headBg ? (+S.bgSec||3) : 0);   // 動画: 先頭が背景なら、その後から測る
+  const tEnd = cam ? Math.max(5, +S.camSec||30) : ((+S.durSec>0) ? Math.min(vid.duration, tStart+(+S.durSec)) : vid.duration);
+  const dur = tEnd - tStart;
+  const pend = []; let n = 0, next = 0; const t0 = performance.now();
+  try{
+    for(;;){
+      let t;
+      if(cam){ const el = (performance.now()-t0)/1000; if(el>=dur) break; if(el<next){ await new Promise(r=>setTimeout(r,10)); if(stopFlag) break; continue; } t = el; next += iv; }
+      else { t = tStart+n*iv; if(t>=tEnd-0.001) break; await seek(Math.min(t+iv*0.25, tEnd-0.001)); }   // フレームの境目を避けて少し内側へ
+      if(stopFlag) break;
+      const res = analyze(); results.push({t, res, shift: lastShift}); lastRes = res;
+      if(n % Math.max(1, S.sampleEvery|0) === 0) pend.push(savePair(t, res, n));
+      drawPreview(res); n++;
+      $('prog').value = Math.min(1, (t-tStart)/dur);
+      const ok = results.filter(r=>r.res).map(r=>r.res.angle);
+      setMsg((cam?'撮影中 ':'測定中 ')+(t-tStart).toFixed(1)+' / '+dur.toFixed(0)+'秒　　現在 '+(res?res.angle.toFixed(1)+'°':'—')+'　　ここまでの中央値 '+(ok.length?median(ok).toFixed(1)+'°':'—'));
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }catch(e){ setMsg('エラー: '+e.message); }
+  samples = await Promise.all(pend);
+  running = false; $('btnRun').disabled = false; $('btnStop').classList.add('hide'); $('prog').classList.add('hide');
+  showResults();
+}
+
+/* ---------- 結果 ---------- */
+function median(a){ const b = a.slice().sort((x,y)=>x-y), m = b.length>>1; return b.length%2 ? b[m] : (b[m-1]+b[m])/2; }
+function calc(){
+  const v = results.filter(r=>r.res).map(r=>r.res), a = v.map(r=>r.angle); if(!a.length) return null;
+  const mean = a.reduce((x,y)=>x+y,0)/a.length, med = median(a);
+  const sd = a.length>1 ? Math.sqrt(a.reduce((x,y)=>x+(y-mean)**2,0)/(a.length-1)) : 0;
+  const mad = Math.max(0.5, 1.4826*median(a.map(x=>Math.abs(x-med)))), keep = a.filter(x=>Math.abs(x-med)<=3*mad);
+  const tm = keep.reduce((x,y)=>x+y,0)/keep.length;
+  return {n:a.length, total:results.length, mean, med, sd, min:Math.min(...a), max:Math.max(...a), trim:tm, trimN:keep.length,
+          L:v.reduce((x,r)=>x+r.L,0)/v.length, R:v.reduce((x,r)=>x+r.R,0)/v.length};
+}
+function showResults(){
+  const st = calc(); $('resCard').classList.remove('hide');
+  if(!st){ setMsg('測定できませんでした。先端位置・ノイズカット距離・探索範囲を確認してください。'); $('rMed').textContent = $('rMean').textContent = $('rStd').textContent = '-'; $('rTable').innerHTML = ''; return; }
+  const tr = parseFloat(S.truth), dif = v => isNaN(tr) ? '' : '（目視との差 '+(v-tr>=0?'+':'')+(v-tr).toFixed(1)+'°）';
+  $('rMed').textContent = st.med.toFixed(1); $('rMean').textContent = st.mean.toFixed(1); $('rStd').textContent = st.sd.toFixed(1);
+  const rows = [['有効フレーム', st.n+' / '+st.total], ['中央値', st.med.toFixed(2)+'° '+dif(st.med)], ['平均値', st.mean.toFixed(2)+'° '+dif(st.mean)],
+    ['外れ値除外平均', st.trim.toFixed(2)+'° ('+st.trimN+'枚)'], ['標準偏差', st.sd.toFixed(2)+'°'], ['最小〜最大', st.min.toFixed(1)+' 〜 '+st.max.toFixed(1)+'°'],
+    ['左の角 / 右の角', st.L.toFixed(1)+'° / '+st.R.toFixed(1)+'°']];
+  if(!isNaN(tr)) rows.splice(1,0,['目視', tr+'°']);
+  rows.push(['測定モード', S.useBg ? '背景あり' : '背景なし']);
+  const badShift = S.useBg ? results.filter(r=>r.shift>S.shiftWarn).length : 0;
+  $('rTable').innerHTML = rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>').join('');
+  drawChart(st);
+  const gal = $('gal'); gal.innerHTML = '';
+  for(const s of samples){
+    const d = document.createElement('div');
+    const mk = (b,cap)=>{ const w = document.createElement('div'); const i = new Image(); i.src = URL.createObjectURL(b); const c = document.createElement('small'); c.textContent = cap; w.append(i,c); return w; };
+    d.append(mk(s.ann,'t='+s.t.toFixed(1)+'s 角度入り'), mk(s.org,'元画像')); gal.append(d);
+  }
+  setMsg('完了: '+st.n+'フレームを測定しました。'+(badShift>results.length*0.2 ? ' ⚠ 背景との差が大きいフレームが多く、カメラが動いた可能性があります。背景を撮り直してください。' : ''));
+}
+function drawChart(st){
+  const c = $('chart'), g = c.getContext('2d'), W = c.width, H = c.height, M = 60;
+  g.fillStyle = '#fff'; g.fillRect(0,0,W,H);
+  const v = results.filter(r=>r.res), tr = parseFloat(S.truth);
+  let lo = Math.min(st.min, isNaN(tr)?st.min:tr)-3, hi = Math.max(st.max, isNaN(tr)?st.max:tr)+3;
+  const tt0 = results[0].t, tmax = (results[results.length-1].t-tt0) || 1;
+  const X = t => M+(W-2*M)*(t-tt0)/tmax, Y = a => H-M-(H-2*M)*(a-lo)/(hi-lo);
+  g.strokeStyle = '#999'; g.strokeRect(M,M/2,W-2*M,H-M*1.5); g.font = '20px sans-serif'; g.fillStyle = '#555';
+  const stp = Math.max(2, Math.round((hi-lo)/6));
+  for(let a=Math.ceil(lo); a<=hi; a++) if(a%stp===0){ g.fillText(a+'°', 6, Y(a)+6); g.strokeStyle = '#eee'; g.beginPath(); g.moveTo(M,Y(a)); g.lineTo(W-M,Y(a)); g.stroke(); }
+  if(!isNaN(tr)){ g.strokeStyle = '#ed7d31'; g.lineWidth = 3; g.beginPath(); g.moveTo(M,Y(tr)); g.lineTo(W-M,Y(tr)); g.stroke(); g.fillStyle = '#ed7d31'; g.fillText('目視 '+tr+'°', W-M-130, Y(tr)-8); }
+  g.strokeStyle = '#2e75b6'; g.lineWidth = 2; g.beginPath(); let f = true;
+  for(const r of v){ const x = X(r.t), y = Y(r.res.angle); if(f){ g.moveTo(x,y); f = false; } else g.lineTo(x,y); } g.stroke();
+  g.strokeStyle = '#1b8a4b'; g.setLineDash([8,6]); g.beginPath(); g.moveTo(M,Y(st.med)); g.lineTo(W-M,Y(st.med)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#1b8a4b'; g.fillText('中央値 '+st.med.toFixed(1)+'°', M+8, Y(st.med)-8);
+  g.fillStyle = '#555'; g.fillText('時間 [秒]', W/2-30, H-10);
+}
+function csvText(){
+  const st = calc(), lines = ['時間[秒],角度,左,右'];
+  for(const r of results) lines.push([r.t.toFixed(2), r.res?r.res.angle.toFixed(2):'', r.res?r.res.L.toFixed(2):'', r.res?r.res.R.toFixed(2):''].join(','));
+  const head = st ? ['# 中央値 '+st.med.toFixed(2), '# 平均 '+st.mean.toFixed(2), '# 標準偏差 '+st.sd.toFixed(2), '# 外れ値除外平均 '+st.trim.toFixed(2), '# 設定 '+JSON.stringify(S)] : [];
+  return '﻿'+head.concat(lines).join('\n');
+}
+async function shareFiles(files){
+  try{ if(navigator.canShare && navigator.canShare({files})){ await navigator.share({files}); return; } }catch(e){ if(e.name==='AbortError') return; }
+  for(const f of files){ const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.append(a); a.click(); a.remove(); await new Promise(r=>setTimeout(r,300)); }
+}
+const stamp = () => { const d = new Date(), p = n=>String(n).padStart(2,'0'); return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes()); };
+
+/* ---------- 操作 ---------- */
+const FIELDS = ['cutMm','lenMm','pxPerMm','truth','tipX','tipY','xMin','xMax','intervalSec','camSec','bgSec','startSec','durSec','shiftWarn','scaleMm'];
+function syncFields(){ for(const k of FIELDS) $(k).value = S[k]; }
+for(const k of FIELDS) $(k).addEventListener('change', ()=>{ S[k] = $(k).value===''?'':(k==='truth'?$(k).value:+$(k).value); saveS(); if(srcMode) drawPreview(lastRes&&!running?null:null); });
+syncFields();
+$('file').addEventListener('change', async e=>{ const f = e.target.files[0]; if(!f) return; try{ await loadFile(f); }catch(err){ $('srcInfo').innerHTML = '<span class="bad">'+err.message+'</span>'; } e.target.value = ''; });
+function setMode(b){ S.useBg = !!b; saveS(); $('mNo').classList.toggle('on', !b); $('mBg').classList.toggle('on', !!b); $('bgPanel').classList.toggle('hide', !b); }
+$('mNo').onclick = ()=>setMode(false); $('mBg').onclick = ()=>setMode(true); setMode(S.useBg);
+$('btnBg').onclick = captureBg;
+$('bgfile').addEventListener('change', async e=>{ const f = e.target.files[0]; if(!f) return; try{ await bgFromExt(f); }catch(err){ $('bgInfo').textContent = err.message; } e.target.value = ''; });
+$('btnBgClear').onclick = ()=>{ BG = null; idbDel('bg'); showBg(); };
+$('btnLive').onclick = ()=>{ if(srcMode!=='camera') return; if(live){ live = false; } else { $('liveBox').classList.remove('hide'); startLive(); } setLiveBtn(); };
+idbGet('bg').then(v=>{ if(v && v.data) BG = v; showBg(); });
+$('btnCam').onclick = startCam;
+$('btnRun').onclick = run;
+$('btnStop').onclick = ()=>{ stopFlag = true; };
+$('btnReset').onclick = ()=>{ S = Object.assign({}, DEF); saveS(); syncFields(); if(srcMode) drawPreview(null); };
+function setAct(){ document.querySelectorAll('.ptrow[data-p]').forEach(r=>r.classList.toggle('act', r.dataset.p===calAct)); if(srcMode) drawPreview(null); }
+const TAPMSG = {T:'画像の中のノズル先端（噴霧の出口）をタップしてください。', A:'スケールの始点Aをタップしてください。', B:'スケールの終点Bをタップしてください。'};
+document.querySelectorAll('.tapbtn').forEach(b=>b.onclick = ()=>{ const p = b.dataset.p; calAct = p; tapMode = p==='T' ? 'tip' : p; setAct(); $('tapHint').textContent = TAPMSG[p]; });
+document.querySelectorAll('.nb').forEach(b=>b.onclick = ()=>nudge(b.dataset.p, +b.dataset.dx, +b.dataset.dy));
+for(const [ids,p] of [[['tipX','tipY'],'T'],[['aX','aY'],'A'],[['bX','bY'],'B']]) for(const id of ids) $(id).addEventListener('focus', ()=>{ calAct = p; setAct(); });
+function ptInput(){ const ax = $('aX').value, ay = $('aY').value, bx = $('bX').value, by = $('bY').value;
+  calA = (ax!=='' && ay!=='') ? {x:+ax, y:+ay} : null; calB = (bx!=='' && by!=='') ? {x:+bx, y:+by} : null; applyScale(); if(srcMode) drawPreview(null); }
+for(const id of ['aX','aY','bX','bY']) $(id).addEventListener('change', ptInput);
+$('btnSaveCal').onclick = saveCal;
+$('scaleMm').addEventListener('change', applyScale);
+$('cPrev').onclick = ()=>setCalMode('prev'); $('cNew').onclick = ()=>setCalMode('new');
+$('cGhost').onclick = ()=>{ ghostOn = !ghostOn; $('cGhost').textContent = '前回の画像を重ねる '+(ghostOn?'ON':'OFF'); $('cGhost').classList.toggle('on', ghostOn); if(srcMode) drawPreview(null); };
+idbGet('cal').then(v=>{ if(v && v.ref) CAL = v; showCal(); setCalMode(S.calMode==='prev' && CAL ? 'prev' : 'new'); });
+pv.addEventListener('click', e=>{
+  if(!tapMode || !srcMode) return;
+  const r = pv.getBoundingClientRect(), x = (e.clientX-r.left)/r.width*REF_W, y = (e.clientY-r.top)/r.height*refH();
+  if(tapMode==='tip'){ S.tipX = +x.toFixed(1); S.tipY = +y.toFixed(1); saveS(); syncFields(); tapMode = null; calAct = 'T'; setAct(); $('tapHint').textContent = '先端を ('+S.tipX+', '+S.tipY+') に設定しました。拡大図を見ながら、座標欄か矢印で微調整できます。'; }
+  else if(tapMode==='A'){ calA = {x:+x.toFixed(1), y:+y.toFixed(1)}; calAct = 'A'; tapMode = 'B'; syncPts(); setAct(); applyScale(); $('tapHint').textContent = '始点Aを設定しました。続けて、終点Bをタップしてください。'; }
+  else if(tapMode==='B'){ calB = {x:+x.toFixed(1), y:+y.toFixed(1)}; calAct = 'B'; tapMode = null; syncPts(); setAct(); applyScale(); $('tapHint').textContent = '終点Bを設定しました。拡大図を見ながら、座標欄か矢印で微調整できます。'; }
+  drawPreview(null);
+});
+$('btnCsv').onclick = ()=>{
+  const st = calc(), name = '噴霧角度_'+stamp();
+  const txt = st ? '中央値 '+st.med.toFixed(2)+'°\n平均 '+st.mean.toFixed(2)+'°\n標準偏差 '+st.sd.toFixed(2)+'°\n' : '';
+  shareFiles([new File([csvText()], name+'.csv', {type:'text/csv'})]);
+};
+$('btnImgs').onclick = ()=>{
+  const n = stamp(), fs = [];
+  samples.forEach((s,i)=>{ fs.push(new File([s.org], n+'_'+i+'_元画像.jpg', {type:'image/jpeg'})); fs.push(new File([s.ann], n+'_'+i+'_角度入り.jpg', {type:'image/jpeg'})); });
+  const ch = $('chart'); ch.toBlob(b=>{ fs.push(new File([b], n+'_グラフ.png', {type:'image/png'})); shareFiles(fs); });
+};
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>{ $('swBadge').textContent = 'オフライン対応OK'; $('swBadge').classList.add('ok'); }).catch(()=>{ $('swBadge').textContent = 'オフライン未対応'; });
+} else $('swBadge').textContent = 'オフライン未対応';
+window.App = {loadFile, bgFromExt, run, calc, get results(){ return results; }, S: ()=>S, setS: o=>{ Object.assign(S,o); }};
+</script>
+</body>
+</html>
