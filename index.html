@@ -14,8 +14,19 @@
 :root{--bg:#f4f6f9;--card:#fff;--ink:#1c2733;--sub:#5d6b7a;--line:#d9e0e8;--main:#1f5fa8;--accent:#e8730c;--ok:#1b8a4b;--ng:#c0392b}
 @media (prefers-color-scheme:dark){:root{--bg:#10151b;--card:#1a222b;--ink:#e8eef5;--sub:#9aa8b8;--line:#2c3844;--main:#5aa2ee;--accent:#ff9a3d;--ok:#4cc27d;--ng:#ff7a6b}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;font-size:16px;line-height:1.5;padding:0 16px env(safe-area-inset-bottom)}
-main{max-width:760px;margin:0 auto;padding-bottom:40px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;font-size:16px;line-height:1.5}
+#app{display:flex;flex-direction:column;min-height:100vh;padding:0 16px env(safe-area-inset-bottom)}
+#left{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0 6px}
+#pv{width:auto;max-width:100%;max-height:42vh;height:auto;margin:0 auto}
+main{max-width:760px;margin:0 auto;padding-bottom:40px;width:100%}
+/* 横向き: 左に撮影画面、右に入力と結果 */
+@media (orientation:landscape) and (min-width:560px){
+  #app{flex-direction:row;height:100vh;min-height:0;gap:14px;overflow:hidden;padding:0 max(14px,env(safe-area-inset-right)) 0 max(14px,env(safe-area-inset-left))}
+  #left{position:static;flex:0 0 55%;max-width:55%;display:flex;flex-direction:column;padding:10px 0;overflow-y:auto}
+  #pv{max-height:58vh}
+  main{flex:1 1 0;min-width:0;max-width:none;height:100vh;overflow-y:auto;padding:0 4px 40px}
+  h1{margin-top:10px}
+}
 h1{font-size:22px;margin:18px 0 4px}
 h2{font-size:17px;margin:0 0 10px}
 .badge{display:inline-block;font-size:13px;padding:2px 10px;border-radius:99px;background:var(--line);color:var(--sub)}
@@ -58,9 +69,21 @@ progress{width:100%;height:14px}
 </style>
 </head>
 <body>
+<div id="app">
+<section id="left">
+  <canvas id="pv" width="960" height="540"></canvas>
+  <p class="note" id="tapHint" style="margin:6px 0 0">オレンジの横線がノイズカット位置。赤い範囲で外縁に接線を当てます。</p>
+  <p class="note" id="liveInfo" style="margin:4px 0 0"></p>
+  <div class="row" style="margin-top:8px">
+    <button class="go" id="btnRun" disabled>測定開始</button>
+    <button class="sub hide" id="btnStop">中止</button>
+  </div>
+  <progress id="prog" value="0" max="1" class="hide" style="margin-top:6px"></progress>
+  <p class="note" id="msg" style="margin:6px 0 0"></p>
+</section>
 <main>
 <h1>噴霧角度測定 <span class="badge" id="swBadge">準備中</span></h1>
-<p class="note">試作 v0.2 ／ 動画・画像は端末内だけで処理します（外部へ送信しません）</p>
+<p class="note">試作 v0.3 ／ 動画・画像は端末内だけで処理します（外部へ送信しません）</p>
 
 <div class="card">
   <h2>① 動画を用意する</h2>
@@ -100,7 +123,6 @@ progress{width:100%;height:14px}
     <button class="sub" id="cNew" style="flex:1">新しく設定する</button>
   </div>
   <p class="note" id="calInfo" style="margin:0 0 8px"></p>
-  <canvas id="pv" width="960" height="540"></canvas>
   <div id="calPrev" class="hide" style="margin-top:10px">
     <div class="row"><button class="sub" id="cGhost">前回の画像を重ねる OFF</button></div>
     <p class="note">カメラ位置が前回と同じなら、前回の画像（薄く重なる）とぴったり合います。合わない時は、カメラ位置を合わせ直すか、「新しく設定する」にしてください。</p>
@@ -134,7 +156,6 @@ progress{width:100%;height:14px}
     <div class="row"><button id="btnSaveCal">⑤ この設定を保存</button></div>
     <p class="note">座標は、横1920に換算した値です。縮尺は、ノイズカット距離と区間の長さ（mm）にだけ影響します。角度そのものは、縮尺に左右されません。スケールは、噴霧に近い手前の面に貼るほど、正確です。</p>
   </div>
-  <p class="note" id="tapHint">オレンジの横線がノイズカット位置。赤い範囲で外縁に接線を当てます。</p>
   <details>
     <summary>設定値</summary>
     <div class="grid">
@@ -162,16 +183,10 @@ progress{width:100%;height:14px}
     <div style="align-self:end"><button class="sub" id="btnLive" style="width:100%">調整ライブ OFF</button></div>
   </div>
   <div id="liveBox" class="hide" style="margin-bottom:10px">
-    <p class="note" id="liveInfo" style="margin:0 0 6px"></p>
     <canvas id="liveChart" width="900" height="200" style="background:#fff"></canvas>
-    <p class="note">調整ライブ: 噴霧を安定させている間の、角度と噴霧量の変化を表示します（直近2分）。安定したと判断したら「測定開始」を押してください。</p>
+    <p class="note">調整ライブ: 噴霧を安定させている間の、角度と噴霧量の変化を表示します（直近2分）。現在の値は、左の画面の下に出ます。</p>
   </div>
-  <div class="row">
-    <button class="go" id="btnRun" disabled>測定開始</button>
-    <button class="sub hide" id="btnStop">中止</button>
-  </div>
-  <progress id="prog" value="0" max="1" class="hide"></progress>
-  <p class="note" id="msg"></p>
+  <p class="note" style="margin:0">安定したと判断したら、左の画面の下の「測定開始」を押してください。</p>
 </div>
 
 <div class="card hide" id="resCard">
@@ -193,6 +208,7 @@ progress{width:100%;height:14px}
   <div class="gal" id="gal"></div>
 </div>
 </main>
+</div>
 
 <script>
 'use strict';
